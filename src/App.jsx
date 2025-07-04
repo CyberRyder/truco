@@ -8,7 +8,9 @@ export default function App() {
   const [gameLog, setGameLog] = useState([])
   const [playerOnePlayStack, setPlayerOnePlayStack] = useState([])
   const [playerTwoPlayStack, setPlayerTwoPlayStack] = useState([])
-  const [round, setRound] = useState(1)
+  const [trick, setTrick] = useState(1)
+  const [playerOneTrickScore, setPlayerOneTrickScore] = useState(0)
+  const [playerTwoTrickScore, setPlayerTwoTrickScore] = useState(0)
   const [deck, setDeck] = useState(JSON.parse(JSON.stringify(startingDeck)))
 
   function addToGameLog(message) {
@@ -25,6 +27,9 @@ export default function App() {
     setGameLog([])
     setPlayerOnePlayStack([])
     setPlayerTwoPlayStack([])
+    setPlayerOneTrickScore(0)
+    setPlayerTwoTrickScore(0)
+    setTrick(1)
 
     // Generate new hands and diva card
     const playerOneHand = drawCards(newDeck, 3)
@@ -56,7 +61,7 @@ export default function App() {
     addToGameLog(`Diva: ${divaCard.name}`)
     addToGameLog(`Manilhas: ${manilhas.map(card => card.name).join(', ')}`)
     addToGameLog(`--------------------------------`)
-    addToGameLog(`BEGIN ROUND ${round}`)
+    addToGameLog(`BEGIN TRICK ${trick}`)
     addToGameLog(`Dealt Player 1's hand`)
     addToGameLog(`Dealt Player 2's hand`)
   }
@@ -69,39 +74,51 @@ export default function App() {
       setPlayerTwoPlayStack([card])
       addToGameLog(`${card.name} played by Player ${card.player}`)
     } else {
-      addToGameLog(`${card.name} cannot be played (Player ${card.player} already played this round)`)
+      addToGameLog(`${card.name} cannot be played (Player ${card.player} already played this trick)`)
     }
   }
 
-  // Check for round completion using useEffect
+  // Check for trick completion using useEffect
   useEffect(() => {
     if (playerOnePlayStack.length > 0 && playerTwoPlayStack.length > 0) {
-      setRound(prevRound => prevRound + 1)
-      if (round === 3) {
-        addToGameLog(`--------------------------------`)
-        addToGameLog(`GAME OVER`)
-        setIsGameStarted(false)
-        setRound(1)
-        return
+      setTrick(prevTrick => prevTrick + 1)
+      const playerOneWinsTrick = playerOnePlayStack[0].id > playerTwoPlayStack[0].id
+      const playerTwoWinsTrick = playerOnePlayStack[0].id < playerTwoPlayStack[0].id
+       
+      if (playerOneWinsTrick) {
+        addToGameLog(`Player 1 wins trick ${trick}`)
+        setPlayerOneTrickScore(prevTrickScore => prevTrickScore + 1)
+      } else if (playerTwoWinsTrick) {
+        addToGameLog(`Player 2 wins trick ${trick}`)
+        setPlayerTwoTrickScore(prevTrickScore => prevTrickScore + 1)
       }
+
       addToGameLog(`--------------------------------`)
-      addToGameLog(`BEGIN ROUND ${round + 1}`)
-      addToGameLog(`Dealt Player 1's hand`)
-      addToGameLog(`Dealt Player 2's hand`)
-      
-      const newPlayerOneHand = drawCards(deck, 3)
-      const newPlayerTwoHand = drawCards(deck, 3)
-      
-      // Set player property for new cards
-      newPlayerOneHand.forEach(card => card.player = 1)
-      newPlayerTwoHand.forEach(card => card.player = 2)
-      
-      setPlayerOneHand(newPlayerOneHand)
-      setPlayerTwoHand(newPlayerTwoHand)
+      addToGameLog(`BEGIN TRICK ${trick}`)
+
       setPlayerOnePlayStack([])
       setPlayerTwoPlayStack([])
     }
   }, [playerOnePlayStack.length, playerTwoPlayStack.length, deck])
+
+  //TODO: add trick completion logic for deciding when to print the next trick and when to increment it
+
+  // React to score changes
+  useEffect(() => {
+    if (playerOneTrickScore === 2) {
+      addToGameLog(`Player 1 wins the round!`)
+      setIsGameStarted(false)
+      setTrick(1)
+      setPlayerOneTrickScore(0)
+      setPlayerTwoTrickScore(0)
+    } else if (playerTwoTrickScore === 2) {
+      addToGameLog(`Player 2 wins the round!`)
+      setIsGameStarted(false)
+      setTrick(1)
+      setPlayerOneTrickScore(0)
+      setPlayerTwoTrickScore(0)
+    }
+  }, [playerOneTrickScore, playerTwoTrickScore])
 
   const playerOneHandItems = isGameStarted ? playerOneHand.map((card) => (
     <button onClick={() => handlePlayCard(card)} key={card.id}>
