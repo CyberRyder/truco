@@ -31,6 +31,7 @@ export default function App() {
     setPlayerTwoTrickScore(0)
     setTrick(1)
 
+
     // Generate new hands and diva card
     const playerOneHand = drawCards(newDeck, 3)
     const playerTwoHand = drawCards(newDeck, 3)
@@ -62,8 +63,6 @@ export default function App() {
     addToGameLog(`Manilhas: ${manilhas.map(card => card.name).join(', ')}`)
     addToGameLog(`--------------------------------`)
     addToGameLog(`BEGIN TRICK ${trick}`)
-    addToGameLog(`Dealt Player 1's hand`)
-    addToGameLog(`Dealt Player 2's hand`)
   }
 
   function handlePlayCard(card) {
