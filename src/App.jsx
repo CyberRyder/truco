@@ -12,7 +12,7 @@ export default function App() {
   const [playerOneTrickScore, setPlayerOneTrickScore] = useState(0)
   const [playerTwoTrickScore, setPlayerTwoTrickScore] = useState(0)
   const [deck, setDeck] = useState(JSON.parse(JSON.stringify(startingDeck)))
-
+  
   function addToGameLog(message) {
     setGameLog(prevLog => [...prevLog, message])
   }
@@ -34,6 +34,7 @@ export default function App() {
     // Generate new hands and diva card with player assignment
     const playerOneHand = drawCards(newDeck, 3, 1)
     const playerTwoHand = drawCards(newDeck, 3, 2)
+
     const divaCard = drawCards(newDeck, 1)[0]
     setPlayerOneHand(playerOneHand)
     setPlayerTwoHand(playerTwoHand)
