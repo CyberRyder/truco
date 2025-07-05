@@ -12,12 +12,12 @@ export default function App() {
   const [playerOneTrickScore, setPlayerOneTrickScore] = useState(0)
   const [playerTwoTrickScore, setPlayerTwoTrickScore] = useState(0)
   const [deck, setDeck] = useState(JSON.parse(JSON.stringify(startingDeck)))
-
+  
   function addToGameLog(message) {
     setGameLog(prevLog => [...prevLog, message])
   }
 
-  function handleNewGame() {
+  function handleNewRound() {
     // Reset deck
     const newDeck = JSON.parse(JSON.stringify(startingDeck))
     newDeck.forEach(card => card.drawn = false)
@@ -31,21 +31,13 @@ export default function App() {
     setPlayerTwoTrickScore(0)
     setTrick(1)
 
+    // Generate new hands and diva card with player assignment
+    const playerOneHand = drawCards(newDeck, 3, 1)
+    const playerTwoHand = drawCards(newDeck, 3, 2)
 
-    // Generate new hands and diva card
-    const playerOneHand = drawCards(newDeck, 3)
-    const playerTwoHand = drawCards(newDeck, 3)
     const divaCard = drawCards(newDeck, 1)[0]
     setPlayerOneHand(playerOneHand)
     setPlayerTwoHand(playerTwoHand)
-
-    // Set player property for each card
-    playerOneHand.forEach(card => {
-      card.player = 1
-    })
-    playerTwoHand.forEach(card => {
-      card.player = 2
-    })    
 
     // Calculate manilhas based on the diva card
     const manilhas = newDeck.filter(card => {
@@ -62,18 +54,24 @@ export default function App() {
     addToGameLog(`Diva: ${divaCard.name}`)
     addToGameLog(`Manilhas: ${manilhas.map(card => card.name).join(', ')}`)
     addToGameLog(`--------------------------------`)
-    addToGameLog(`BEGIN TRICK ${trick}`)
+    //addToGameLog(`BEGIN TRICK ${trick}`)
+    addToGameLog(`Dealt Player 1's hand`)
+    addToGameLog(`Dealt Player 2's hand`)
+    addToGameLog(`--------------------------------`)
+
   }
 
-  function handlePlayCard(card) {
-    if (card.player === 1 && playerOnePlayStack.length === 0) {
+  function handlePlayCard(card, player) {
+    if (player === 1 && playerOnePlayStack.length === 0) {
       setPlayerOnePlayStack([card])
-      addToGameLog(`${card.name} played by Player ${card.player}`)
-    } else if (card.player === 2 && playerTwoPlayStack.length === 0) {
+      setPlayerOneHand(prevHand => prevHand.filter(c => c.id !== card.id))
+      addToGameLog(`${card.name} played by Player ${player}`)
+    } else if (player === 2 && playerTwoPlayStack.length === 0) {
       setPlayerTwoPlayStack([card])
-      addToGameLog(`${card.name} played by Player ${card.player}`)
+      setPlayerTwoHand(prevHand => prevHand.filter(c => c.id !== card.id))
+      addToGameLog(`${card.name} played by Player ${player}`)
     } else {
-      addToGameLog(`${card.name} cannot be played (Player ${card.player} already played this trick)`)
+      addToGameLog(`${card.name} cannot be played (Player ${player} already played this trick)`)
     }
   }
 
@@ -93,7 +91,8 @@ export default function App() {
       }
 
       addToGameLog(`--------------------------------`)
-      addToGameLog(`BEGIN TRICK ${trick}`)
+      //TODO: add logic to print the next trick
+      //ddToGameLog(`BEGIN TRICK ${trick}`)
 
       setPlayerOnePlayStack([])
       setPlayerTwoPlayStack([])
@@ -120,13 +119,13 @@ export default function App() {
   }, [playerOneTrickScore, playerTwoTrickScore])
 
   const playerOneHandItems = isGameStarted ? playerOneHand.map((card) => (
-    <button onClick={() => handlePlayCard(card)} key={card.id}>
+    <button onClick={() => handlePlayCard(card, 1)} key={card.id}>
       {card.name}
-    </button>
-  )) : <button>N/A</button>
+    </button>)
+  ) : <button>N/A</button>
 
   const playerTwoHandItems = isGameStarted ? playerTwoHand.map((card) => (
-    <button onClick={() => handlePlayCard(card)} key={card.id}>
+    <button onClick={() => handlePlayCard(card, 2)} key={card.id}>
       {card.name}
     </button>
   )) : <button>N/A</button>
@@ -134,7 +133,7 @@ export default function App() {
   return (
     <div>
       <h1>Truco Paulista</h1>
-      <NewGameButton onNewGame={handleNewGame} />
+      <NewRoundButton onNewRound={handleNewRound} />
       <h4>Player 1's Hand</h4>
       {playerOneHandItems}
       <h4>Player 1 Actions</h4>
@@ -156,25 +155,27 @@ function getRandomIntInclusive(min, max) {
   return Math.floor(Math.random() * (maxFloored - minCeiled + 1) + minCeiled); // The maximum is inclusive and the minimum is inclusive
 }
 
-function drawCards(deck, numCards) {
+function drawCards(deck, numCards, player = null) {
+  const availableCards = deck.filter(card => !card.drawn)
   const hand = []
-  for (let i = 0; i < numCards; i++) {
-    const randomIndex = getRandomIntInclusive(0, deck.length - 1)
-    if (deck[randomIndex].drawn) {
-      i--
-    } else {
-      const card = deck[randomIndex]
-      deck[randomIndex].drawn = true
-      hand.push(card)
+  
+  for (let i = 0; i < Math.min(numCards, availableCards.length); i++) {
+    const randomIndex = getRandomIntInclusive(0, availableCards.length - 1)
+    const card = availableCards[randomIndex]
+    card.drawn = true
+    if (player !== null) {
+      card.player = player
     }
+    hand.push(card)
+    availableCards.splice(randomIndex, 1)
   }
   return hand
 }
 
-function NewGameButton({ onNewGame }) {
+function NewRoundButton({ onNewRound }) {
   return (
     <div>
-      <button onClick={onNewGame}>New Game</button>
+      <button onClick={onNewRound}>New Round</button>
     </div>
   )
 }
