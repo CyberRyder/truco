@@ -12,6 +12,10 @@ export default function App() {
   const [playerOneTrickScore, setPlayerOneTrickScore] = useState(0)
   const [playerTwoTrickScore, setPlayerTwoTrickScore] = useState(0)
   const [deck, setDeck] = useState(JSON.parse(JSON.stringify(startingDeck)))
+  const [bet, setBet] = useState(1)
+  const [betStack, setBetStack] = useState(0)
+  const [playerOneRoundScore, setPlayerOneRoundScore] = useState(0)
+  const [playerTwoRoundScore, setPlayerTwoRoundScore] = useState(0)
 
   function addToGameLog(message) {
     setGameLog(prevLog => [...prevLog, message])
@@ -29,6 +33,8 @@ export default function App() {
     setPlayerTwoPlayStack([])
     setPlayerOneTrickScore(0)
     setPlayerTwoTrickScore(0)
+    setBetStack(0)
+    setBet(1)
     setTrick(1)
 
     // Generate new hands and diva card with player assignment
@@ -39,9 +45,8 @@ export default function App() {
     setPlayerTwoHand(playerTwoHand)
 
     // Calculate manilhas based on the diva card
-    const manilhas = newDeck.filter(card => {
-      return Math.ceil(card.id / 4) - 1 === ((Math.ceil(divaCard.id / 4)) % 10)
-    })
+    const divaSuit = Math.ceil(divaCard.id / 4)
+    const manilhas = newDeck.filter(card => Math.ceil(card.id / 4) - 1 === (divaSuit % 10))
 
     // Add 100 to manilhas ids so they place higher in rankings
     manilhas.forEach(card => {
@@ -90,15 +95,12 @@ export default function App() {
       }
 
       addToGameLog(`--------------------------------`)
-      //TODO: add logic to print the next trick
-      //ddToGameLog(`BEGIN TRICK ${trick}`)
 
       setPlayerOnePlayStack([])
       setPlayerTwoPlayStack([])
     }
   }, [playerOnePlayStack.length, playerTwoPlayStack.length, deck])
 
-  //TODO: add trick completion logic for deciding when to print the next trick and when to increment it
 
   // React to score changes
   useEffect(() => {
@@ -108,14 +110,51 @@ export default function App() {
       setTrick(1)
       setPlayerOneTrickScore(0)
       setPlayerTwoTrickScore(0)
+      setPlayerOneRoundScore(prevRoundScore => prevRoundScore + bet)
     } else if (playerTwoTrickScore === 2) {
       addToGameLog(`Player 2 wins the round!`)
       setIsGameStarted(false)
       setTrick(1)
       setPlayerOneTrickScore(0)
       setPlayerTwoTrickScore(0)
+      setPlayerTwoRoundScore(prevRoundScore => prevRoundScore + bet)
     }
   }, [playerOneTrickScore, playerTwoTrickScore])
+
+  // Separate useEffect for logging round scores
+  useEffect(() => {
+    if (playerOneRoundScore > 0 || playerTwoRoundScore > 0) {
+      addToGameLog(`Player 1's score: ${playerOneRoundScore}`)
+      addToGameLog(`Player 2's score: ${playerTwoRoundScore}`)
+      addToGameLog(`--------------------------------`)
+      if (playerOneRoundScore >= 12) {
+        addToGameLog(`Player 1 wins the game!`)
+        setIsGameStarted(false)
+        setPlayerOneRoundScore(0)
+        setPlayerTwoRoundScore(0)
+      } else if (playerTwoRoundScore >= 12) {
+        addToGameLog(`Player 2 wins the game!`)
+        setIsGameStarted(false)
+        setPlayerOneRoundScore(0)
+        setPlayerTwoRoundScore(0)
+      }
+    }
+  }, [playerOneRoundScore, playerTwoRoundScore])
+
+  function handleResetGame() {
+    setPlayerOneHand([])
+    setPlayerTwoHand([])
+    setGameLog([])
+    setPlayerOnePlayStack([])
+    setPlayerTwoPlayStack([])
+    setPlayerOneTrickScore(0)
+    setPlayerTwoTrickScore(0)
+    setTrick(1)
+    setPlayerOneRoundScore(0)
+    setPlayerTwoRoundScore(0)
+    setDeck(JSON.parse(JSON.stringify(startingDeck)))
+    setIsGameStarted(false)
+  }
 
   const playerOneHandItems = isGameStarted ? playerOneHand.map((card) => (
     <button onClick={() => handlePlayCard(card, 1)} key={card.id}>
@@ -128,17 +167,69 @@ export default function App() {
       {card.name}
     </button>
   )) : <button>N/A</button>
+  
+  function handleFold(player) {
+    addToGameLog(`Player ${player} folds`)
+    addToGameLog(`--------------------------------`)
+    if (player === 1) {
+      setPlayerTwoTrickScore(2)
+      setBetStack(0)
+    } else if (player === 2) {
+      setPlayerOneTrickScore(2)
+      setBetStack(0)
+    } else {
+      addToGameLog(`Invalid player`)
+    }
+    setIsGameStarted(false)
+  }
+
+  function handleAccept(player) {
+    addToGameLog(`Player ${player} accepts`)
+    setBet(betStack)
+    setBetStack(0)
+  }
+
+  function handleBet(player, bet) {
+    addToGameLog(`Player ${player} bets ${bet}`)
+    setBetStack(bet)
+  }
+
+  //TODO: add logic to include accepting
+  const playerOneActions = isGameStarted ? (
+    <div>
+      <button onClick={() => handleBet(1, 3)}>Truco</button>
+      <button onClick={() => handleBet(1, 6)}>Seis</button>
+      <button onClick={() => handleBet(1, 9)}>Nove</button>
+      <button onClick={() => handleBet(1, 12)}>Doze</button>
+      <button onClick={() => handleFold(1)}>Corro</button>
+      <button onClick={() => handleAccept(1)}>Aceito</button>
+    </div>
+  ) : <button>N/A</button>
+
+  const playerTwoActions = isGameStarted ? (
+    <div>
+      <button onClick={() => handleBet(2, 3)}>Truco</button>
+      <button onClick={() => handleBet(2, 6)}>Seis</button>
+      <button onClick={() => handleBet(2, 9)}>Nove</button>
+      <button onClick={() => handleBet(2, 12)}>Doze</button>
+      <button onClick={() => handleFold(2)}>Corro</button>
+      <button onClick={() => handleAccept(2)}>Aceito</button>
+    </div>
+  ) : <button>N/A</button>
 
   return (
     <div>
       <h1>Truco Paulista</h1>
       <NewRoundButton onNewRound={handleNewRound} />
+      <ResetGameButton onResetGame={handleResetGame} />
       <h4>Player 1's Hand</h4>
       {playerOneHandItems}
       <h4>Player 1 Actions</h4>
+      {playerOneActions}
       <h4>Player 2's Hand</h4>
       {playerTwoHandItems}
       <h4>Player 2 Actions</h4>
+      {playerTwoActions}
       <h4>--------------------------------</h4>
       <h3>Game Log</h3>
       {gameLog.map((message, index) => (
@@ -175,6 +266,14 @@ function NewRoundButton({ onNewRound }) {
   return (
     <div>
       <button onClick={onNewRound}>New Round</button>
+    </div>
+  )
+}
+
+function ResetGameButton({ onResetGame }) {
+  return (
+    <div>
+      <button onClick={onResetGame}>Reset Game</button>
     </div>
   )
 }
