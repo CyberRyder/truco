@@ -58,7 +58,6 @@ export default function App() {
     addToGameLog(`Diva: ${divaCard.name}`)
     addToGameLog(`Manilhas: ${manilhas.map(card => card.name).join(', ')}`)
     addToGameLog(`--------------------------------`)
-    //addToGameLog(`BEGIN TRICK ${trick}`)
     addToGameLog(`Dealt Player 1's hand`)
     addToGameLog(`Dealt Player 2's hand`)
     addToGameLog(`--------------------------------`)
