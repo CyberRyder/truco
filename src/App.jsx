@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
+//TODO: handle the case where a player folds after setting a bet (truco -> seis -> corro) should give the other player 3, not 6
+
 export default function App() {
   const [isGameStarted, setIsGameStarted] = useState(false)
   const [playerOneHand, setPlayerOneHand] = useState([])
@@ -12,8 +14,8 @@ export default function App() {
   const [playerOneTrickScore, setPlayerOneTrickScore] = useState(0)
   const [playerTwoTrickScore, setPlayerTwoTrickScore] = useState(0)
   const [deck, setDeck] = useState(JSON.parse(JSON.stringify(startingDeck)))
-  const [bet, setBet] = useState(1)
-  const [betStack, setBetStack] = useState(0)
+  const [bet, setBet] = useState({ value: 1, player: null })
+  const [betStack, setBetStack] = useState({ value: 0, player: null })
   const [playerOneRoundScore, setPlayerOneRoundScore] = useState(0)
   const [playerTwoRoundScore, setPlayerTwoRoundScore] = useState(0)
 
@@ -33,8 +35,8 @@ export default function App() {
     setPlayerTwoPlayStack([])
     setPlayerOneTrickScore(0)
     setPlayerTwoTrickScore(0)
-    setBetStack(0)
-    setBet(1)
+    setBetStack({ value: 0, player: null })
+    setBet({ value: 1, player: null })
     setTrick(1)
 
     // Generate new hands and diva card with player assignment
@@ -61,19 +63,20 @@ export default function App() {
     addToGameLog(`Dealt Player 1's hand`)
     addToGameLog(`Dealt Player 2's hand`)
     addToGameLog(`--------------------------------`)
-
   }
 
   function handlePlayCard(card, player) {
-    if (player === 1 && playerOnePlayStack.length === 0) {
+    if (player === 1 && playerOnePlayStack.length === 0 && betStack.value === 0) {
       setPlayerOnePlayStack([card])
       setPlayerOneHand(prevHand => prevHand.filter(c => c.id !== card.id))
       addToGameLog(`${card.name} played by Player ${player}`)
-    } else if (player === 2 && playerTwoPlayStack.length === 0) {
+    } else if (player === 2 && playerTwoPlayStack.length === 0 && betStack.value === 0) {
       setPlayerTwoPlayStack([card])
       setPlayerTwoHand(prevHand => prevHand.filter(c => c.id !== card.id))
       addToGameLog(`${card.name} played by Player ${player}`)
-    } else {
+    } else if (betStack.value > 0) {
+      addToGameLog(`${card.name} cannot be played (Player ${player} has not bet/accepted)`)
+    } else if (playerOnePlayStack.length > 0 || playerTwoPlayStack.length > 0) {
       addToGameLog(`${card.name} cannot be played (Player ${player} already played this trick)`)
     }
   }
@@ -109,16 +112,16 @@ export default function App() {
       setTrick(1)
       setPlayerOneTrickScore(0)
       setPlayerTwoTrickScore(0)
-      setPlayerOneRoundScore(prevRoundScore => prevRoundScore + bet)
+      setPlayerOneRoundScore(prevRoundScore => prevRoundScore + bet.value)
     } else if (playerTwoTrickScore === 2) {
       addToGameLog(`Player 2 wins the round!`)
       setIsGameStarted(false)
       setTrick(1)
       setPlayerOneTrickScore(0)
       setPlayerTwoTrickScore(0)
-      setPlayerTwoRoundScore(prevRoundScore => prevRoundScore + bet)
+      setPlayerTwoRoundScore(prevRoundScore => prevRoundScore + bet.value)
     }
-  }, [playerOneTrickScore, playerTwoTrickScore])
+  }, [playerOneTrickScore, playerTwoTrickScore, bet])
 
   // Separate useEffect for logging round scores
   useEffect(() => {
@@ -172,10 +175,10 @@ export default function App() {
     addToGameLog(`--------------------------------`)
     if (player === 1) {
       setPlayerTwoTrickScore(2)
-      setBetStack(0)
+      setBetStack({ value: 0, player: null })
     } else if (player === 2) {
       setPlayerOneTrickScore(2)
-      setBetStack(0)
+      setBetStack({ value: 0, player: null })
     } else {
       addToGameLog(`Invalid player`)
     }
@@ -183,23 +186,27 @@ export default function App() {
   }
 
   function handleAccept(player) {
-    addToGameLog(`Player ${player} accepts`)
-    setBet(betStack)
-    setBetStack(0)
+    if (betStack.value > 0) {
+      addToGameLog(`Player ${player} accepts`)
+      setBet({ value: betStack.value, player: player })
+      setBetStack({ value: 0, player: null })
+    } else {
+      addToGameLog(`Player ${player} cannot accept (No bet has been made)`)
+    }
   }
 
-  function handleBet(player, bet) {
-    addToGameLog(`Player ${player} bets ${bet}`)
-    setBetStack(bet)
+  function handleBet(betValue, player) {
+    addToGameLog(`Player ${player} bets ${betValue}`)
+    setBetStack({ value: betValue, player: player })
   }
 
   //TODO: add logic to include accepting
   const playerOneActions = isGameStarted ? (
     <div>
-      <button onClick={() => handleBet(1, 3)}>Truco</button>
-      <button onClick={() => handleBet(1, 6)}>Seis</button>
-      <button onClick={() => handleBet(1, 9)}>Nove</button>
-      <button onClick={() => handleBet(1, 12)}>Doze</button>
+      {(betStack.value === 0 && bet.value === 1) && <button onClick={() => handleBet(3, 1)}>Truco</button>}
+      {((betStack.value === 3 || bet.value === 3) && betStack.player !== 1) && <button onClick={() => handleBet(6, 1)}>Seis</button>}
+      {((betStack.value === 6 || bet.value === 6) && betStack.player !== 1) && <button onClick={() => handleBet(9, 1)}>Nove</button>}
+      {((betStack.value === 9 || bet.value === 9) && betStack.player !== 1) && <button onClick={() => handleBet(12, 1)}>Doze</button>} 
       <button onClick={() => handleFold(1)}>Corro</button>
       <button onClick={() => handleAccept(1)}>Aceito</button>
     </div>
@@ -207,10 +214,10 @@ export default function App() {
 
   const playerTwoActions = isGameStarted ? (
     <div>
-      <button onClick={() => handleBet(2, 3)}>Truco</button>
-      <button onClick={() => handleBet(2, 6)}>Seis</button>
-      <button onClick={() => handleBet(2, 9)}>Nove</button>
-      <button onClick={() => handleBet(2, 12)}>Doze</button>
+      {(betStack.value === 0 && bet.value === 1) && <button onClick={() => handleBet(3, 2)}>Truco</button>}
+      {((betStack.value === 3 || bet.value === 3) && betStack.player !== 2) && <button onClick={() => handleBet(6, 2)}>Seis</button>}
+      {((betStack.value === 6 || bet.value === 6) && betStack.player !== 2) && <button onClick={() => handleBet(9, 2)}>Nove</button>}
+      {((betStack.value === 9 || bet.value === 9) && betStack.player !== 2) && <button onClick={() => handleBet(12, 2)}>Doze</button>}
       <button onClick={() => handleFold(2)}>Corro</button>
       <button onClick={() => handleAccept(2)}>Aceito</button>
     </div>
