@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
-//TODO: handle the case where a player folds after setting a bet (truco -> seis -> corro) should give the other player 3, not 6
-
 export default function App() {
   const [isGameStarted, setIsGameStarted] = useState(false)
   const [playerOneHand, setPlayerOneHand] = useState([])
   const [playerTwoHand, setPlayerTwoHand] = useState([])
+  const [divaCard, setDivaCard] = useState(null)
+  const [manilhas, setManilhas] = useState([])
   const [gameLog, setGameLog] = useState([])
   const [playerOnePlayStack, setPlayerOnePlayStack] = useState([])
   const [playerTwoPlayStack, setPlayerTwoPlayStack] = useState([])
@@ -35,6 +35,8 @@ export default function App() {
     setPlayerTwoPlayStack([])
     setPlayerOneTrickScore(0)
     setPlayerTwoTrickScore(0)
+    setDivaCard(null)
+    setManilhas([])
     setBetStack({ value: 0, player: null })
     setBet({ value: 1, player: null })
     setTrick(1)
@@ -43,12 +45,14 @@ export default function App() {
     const playerOneHand = drawCards(newDeck, 3, 1)
     const playerTwoHand = drawCards(newDeck, 3, 2)
     const divaCard = drawCards(newDeck, 1)[0]
+    setDivaCard(divaCard)
     setPlayerOneHand(playerOneHand)
     setPlayerTwoHand(playerTwoHand)
 
     // Calculate manilhas based on the diva card
     const divaSuit = Math.ceil(divaCard.id / 4)
     const manilhas = newDeck.filter(card => Math.ceil(card.id / 4) - 1 === (divaSuit % 10))
+    setManilhas(manilhas)
 
     // Add 100 to manilhas ids so they place higher in rankings
     manilhas.forEach(card => {
@@ -57,9 +61,6 @@ export default function App() {
     
     setIsGameStarted(true)
 
-    addToGameLog(`Diva: ${divaCard.name}`)
-    addToGameLog(`Manilhas: ${manilhas.map(card => card.name).join(', ')}`)
-    addToGameLog(`--------------------------------`)
     addToGameLog(`Dealt Player 1's hand`)
     addToGameLog(`Dealt Player 2's hand`)
     addToGameLog(`--------------------------------`)
@@ -146,11 +147,15 @@ export default function App() {
   function handleResetGame() {
     setPlayerOneHand([])
     setPlayerTwoHand([])
+    setDivaCard(null)
+    setManilhas([])
     setGameLog([])
     setPlayerOnePlayStack([])
     setPlayerTwoPlayStack([])
     setPlayerOneTrickScore(0)
     setPlayerTwoTrickScore(0)
+    setBet({ value: 1, player: null })
+    setBetStack({ value: 0, player: null })
     setTrick(1)
     setPlayerOneRoundScore(0)
     setPlayerTwoRoundScore(0)
@@ -187,16 +192,23 @@ export default function App() {
 
   function handleAccept(player) {
     if (betStack.value > 0) {
-      addToGameLog(`Player ${player} accepts`)
-      setBet({ value: betStack.value, player: player })
-      setBetStack({ value: 0, player: null })
+      if (betStack.player !== player) {
+        addToGameLog(`Player ${player} accepts`)
+        setBet({ value: betStack.value, player: player })
+        setBetStack({ value: 0, player: null })
+      } else {
+        addToGameLog(`Player ${player} cannot accept (bet setter)`)
+      }
     } else {
-      addToGameLog(`Player ${player} cannot accept (No bet has been made)`)
+      addToGameLog(`Player ${player} cannot accept (no bet has been made)`)
     }
   }
 
   function handleBet(betValue, player) {
     addToGameLog(`Player ${player} bets ${betValue}`)
+   if (betValue > 3) {
+      setBet({ value: betValue - 3, player: player })
+    }
     setBetStack({ value: betValue, player: player })
   }
 
@@ -204,9 +216,9 @@ export default function App() {
   const playerOneActions = isGameStarted ? (
     <div>
       {(betStack.value === 0 && bet.value === 1) && <button onClick={() => handleBet(3, 1)}>Truco</button>}
-      {((betStack.value === 3 || bet.value === 3) && betStack.player !== 1) && <button onClick={() => handleBet(6, 1)}>Seis</button>}
-      {((betStack.value === 6 || bet.value === 6) && betStack.player !== 1) && <button onClick={() => handleBet(9, 1)}>Nove</button>}
-      {((betStack.value === 9 || bet.value === 9) && betStack.player !== 1) && <button onClick={() => handleBet(12, 1)}>Doze</button>} 
+      {((betStack.value === 3 || (bet.value === 3 && betStack.value === 0)) && betStack.player !== 1) && <button onClick={() => handleBet(6, 1)}>Seis</button>}
+      {((betStack.value === 6 || (bet.value === 6 && betStack.value === 0)) && betStack.player !== 1) && <button onClick={() => handleBet(9, 1)}>Nove</button>}
+      {((betStack.value === 9 || (bet.value === 9 && betStack.value === 0)) && betStack.player !== 1) && <button onClick={() => handleBet(12, 1)}>Doze</button>} 
       <button onClick={() => handleFold(1)}>Corro</button>
       <button onClick={() => handleAccept(1)}>Aceito</button>
     </div>
@@ -215,9 +227,9 @@ export default function App() {
   const playerTwoActions = isGameStarted ? (
     <div>
       {(betStack.value === 0 && bet.value === 1) && <button onClick={() => handleBet(3, 2)}>Truco</button>}
-      {((betStack.value === 3 || bet.value === 3) && betStack.player !== 2) && <button onClick={() => handleBet(6, 2)}>Seis</button>}
-      {((betStack.value === 6 || bet.value === 6) && betStack.player !== 2) && <button onClick={() => handleBet(9, 2)}>Nove</button>}
-      {((betStack.value === 9 || bet.value === 9) && betStack.player !== 2) && <button onClick={() => handleBet(12, 2)}>Doze</button>}
+      {((betStack.value === 3 || (bet.value === 3 && betStack.value === 0)) && betStack.player !== 2) && <button onClick={() => handleBet(6, 2)}>Seis</button>}
+      {((betStack.value === 6 || (bet.value === 6 && betStack.value === 0)) && betStack.player !== 2) && <button onClick={() => handleBet(9, 2)}>Nove</button>}
+      {((betStack.value === 9 || (bet.value === 9 && betStack.value === 0)) && betStack.player !== 2) && <button onClick={() => handleBet(12, 2)}>Doze</button>}
       <button onClick={() => handleFold(2)}>Corro</button>
       <button onClick={() => handleAccept(2)}>Aceito</button>
     </div>
@@ -228,6 +240,18 @@ export default function App() {
       <h1>Truco Paulista</h1>
       <NewRoundButton onNewRound={handleNewRound} />
       <ResetGameButton onResetGame={handleResetGame} />
+      <h4>--------------------------------</h4>
+      <div>
+        Diva: {divaCard?.name || 'Not set'}
+        <br />
+        Manilhas: {manilhas.map(card => card.name).join(', ') || 'Not set'}
+        <br />
+        Bet Stack: {betStack.value}
+        <br />
+        Bet: {bet.value}
+      </div>
+      <h4>--------------------------------</h4>
+
       <h4>Player 1's Hand</h4>
       {playerOneHandItems}
       <h4>Player 1 Actions</h4>
