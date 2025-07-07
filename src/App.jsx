@@ -1,65 +1,101 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import './App.css'
 
 export default function App() {
-  const [isGameStarted, setIsGameStarted] = useState(false)
-  const [playerOneHand, setPlayerOneHand] = useState([])
-  const [playerTwoHand, setPlayerTwoHand] = useState([])
-  const [divaCard, setDivaCard] = useState(null)
-  const [manilhas, setManilhas] = useState([])
-  const [gameLog, setGameLog] = useState([])
-  const [playerOnePlayStack, setPlayerOnePlayStack] = useState([])
-  const [playerTwoPlayStack, setPlayerTwoPlayStack] = useState([])
-  const [trick, setTrick] = useState(1)
-  const [playerOneTrickScore, setPlayerOneTrickScore] = useState(0)
-  const [playerTwoTrickScore, setPlayerTwoTrickScore] = useState(0)
-  const [deck, setDeck] = useState(JSON.parse(JSON.stringify(startingDeck)))
-  const [bet, setBet] = useState({ value: 1, player: null })
-  const [betStack, setBetStack] = useState({ value: 0, player: null })
-  const [playerOneRoundScore, setPlayerOneRoundScore] = useState(0)
-  const [playerTwoRoundScore, setPlayerTwoRoundScore] = useState(0)
+  const [gameState, setGameState] = useState({
+    // Game status
+    isStarted: false,
+    
+    // Players
+    playerOne: {
+      hand: [],
+      playStack: [],
+      trickScore: 0,
+      roundScore: 0
+    },
+    playerTwo: {
+      hand: [],
+      playStack: [],
+      trickScore: 0,
+      roundScore: 0
+    },
+    
+    // Game elements
+    divaCard: null,
+    manilhas: [],
+    trick: 1,
+    deck: JSON.parse(JSON.stringify(startingDeck)),
+    
+    // Betting
+    bet: { value: 1, player: null },
+    betStack: { value: 0, player: null },
+    
+    // Game log
+    gameLog: []
+  })
 
-  function addToGameLog(message) {
-    setGameLog(prevLog => [...prevLog, message])
+  // Helper functions to update specific parts of the state
+  const updateGameState = (updates) => {
+    setGameState(prevState => ({ ...prevState, ...updates }))
+  }
+
+  const updatePlayer = (playerNumber, updates) => {
+    const playerKey = playerNumber === 1 ? 'playerOne' : 'playerTwo'
+    setGameState(prevState => ({
+      ...prevState,
+      [playerKey]: {
+        ...prevState[playerKey],
+        ...updates
+      }
+    }))
+  }
+
+  const addToGameLog = (message) => {
+    setGameState(prevState => ({
+      ...prevState,
+      gameLog: [...prevState.gameLog, message]
+    }))
   }
 
   function handleNewRound() {
     // Reset deck
     const newDeck = JSON.parse(JSON.stringify(startingDeck))
     newDeck.forEach(card => card.drawn = false)
-    setDeck(newDeck)
-
-    // Reset game log and play stacks
-    setGameLog([])
-    setPlayerOnePlayStack([])
-    setPlayerTwoPlayStack([])
-    setPlayerOneTrickScore(0)
-    setPlayerTwoTrickScore(0)
-    setDivaCard(null)
-    setManilhas([])
-    setBetStack({ value: 0, player: null })
-    setBet({ value: 1, player: null })
-    setTrick(1)
-
-    // Generate new hands and diva card with player assignment
+    
+    // Generate new hands and diva card
     const playerOneHand = drawCards(newDeck, 3, 1)
     const playerTwoHand = drawCards(newDeck, 3, 2)
     const divaCard = drawCards(newDeck, 1)[0]
-    setDivaCard(divaCard)
-    setPlayerOneHand(playerOneHand)
-    setPlayerTwoHand(playerTwoHand)
-
-    // Calculate manilhas based on the diva card
+    
+    // Calculate manilhas
     const divaSuit = Math.ceil(divaCard.id / 4)
     const manilhas = newDeck.filter(card => Math.ceil(card.id / 4) - 1 === (divaSuit % 10))
-    setManilhas(manilhas)
-
-    // Add 100 to manilhas ids so they place higher in rankings
-    manilhas.forEach(card => {
-      card.id += 100
+    manilhas.forEach(card => { card.id += 100 })
+    
+    // Update all state at once
+    updateGameState({
+      deck: newDeck,
+      gameLog: [],
+      divaCard,
+      manilhas,
+      isStarted: true,
+      betStack: { value: 0, player: null },
+      bet: { value: 1, player: null },
+      trick: 1
     })
     
-    setIsGameStarted(true)
+    // Update players
+    updatePlayer(1, {
+      hand: playerOneHand,
+      playStack: [],
+      trickScore: 0,
+    })
+    
+    updatePlayer(2, {
+      hand: playerTwoHand,
+      playStack: [],
+      trickScore: 0,
+    })
 
     addToGameLog(`Dealt Player 1's hand`)
     addToGameLog(`Dealt Player 2's hand`)
@@ -67,109 +103,129 @@ export default function App() {
   }
 
   function handlePlayCard(card, player) {
-    if (player === 1 && playerOnePlayStack.length === 0 && betStack.value === 0) {
-      setPlayerOnePlayStack([card])
-      setPlayerOneHand(prevHand => prevHand.filter(c => c.id !== card.id))
+    const currentPlayer = player === 1 ? gameState.playerOne : gameState.playerTwo
+    
+    //only play if the player has not played a card yet and the bet stack is empty
+    if (currentPlayer.playStack.length === 0 && gameState.betStack.value === 0) {
+      updatePlayer(player, {
+        playStack: [card],
+        hand: currentPlayer.hand.filter(c => c.id !== card.id)
+      })
       addToGameLog(`${card.name} played by Player ${player}`)
-    } else if (player === 2 && playerTwoPlayStack.length === 0 && betStack.value === 0) {
-      setPlayerTwoPlayStack([card])
-      setPlayerTwoHand(prevHand => prevHand.filter(c => c.id !== card.id))
-      addToGameLog(`${card.name} played by Player ${player}`)
-    } else if (betStack.value > 0) {
+    } else if (gameState.betStack.value > 0) {
       addToGameLog(`${card.name} cannot be played (Player ${player} has not bet/accepted)`)
-    } else if (playerOnePlayStack.length > 0 || playerTwoPlayStack.length > 0) {
+    } else {
       addToGameLog(`${card.name} cannot be played (Player ${player} already played this trick)`)
     }
   }
 
-  // Check for trick completion using useEffect
+  // Check for trick completion
   useEffect(() => {
-    if (playerOnePlayStack.length > 0 && playerTwoPlayStack.length > 0) {
-      setTrick(prevTrick => prevTrick + 1)
-      const playerOneWinsTrick = playerOnePlayStack[0].id > playerTwoPlayStack[0].id
-      const playerTwoWinsTrick = playerOnePlayStack[0].id < playerTwoPlayStack[0].id
+    if (gameState.playerOne.playStack.length > 0 && gameState.playerTwo.playStack.length > 0) {
+      updateGameState({ trick: gameState.trick + 1 })
+      
+      const playerOneWinsTrick = gameState.playerOne.playStack[0].id > gameState.playerTwo.playStack[0].id
+      const playerTwoWinsTrick = gameState.playerOne.playStack[0].id < gameState.playerTwo.playStack[0].id
        
       if (playerOneWinsTrick) {
-        addToGameLog(`Player 1 wins trick ${trick}`)
-        setPlayerOneTrickScore(prevTrickScore => prevTrickScore + 1)
+        addToGameLog(`Player 1 wins trick ${gameState.trick}`)
+        updatePlayer(1, { trickScore: gameState.playerOne.trickScore + 1 })
       } else if (playerTwoWinsTrick) {
-        addToGameLog(`Player 2 wins trick ${trick}`)
-        setPlayerTwoTrickScore(prevTrickScore => prevTrickScore + 1)
+        addToGameLog(`Player 2 wins trick ${gameState.trick}`)
+        updatePlayer(2, { trickScore: gameState.playerTwo.trickScore + 1 })
       }
 
       addToGameLog(`--------------------------------`)
 
-      setPlayerOnePlayStack([])
-      setPlayerTwoPlayStack([])
+      // Reset play stacks
+      updatePlayer(1, { playStack: [] })
+      updatePlayer(2, { playStack: [] })
     }
-  }, [playerOnePlayStack.length, playerTwoPlayStack.length, deck])
+  }, [gameState.playerOne.playStack.length, gameState.playerTwo.playStack.length])
 
 
-  // React to score changes
+  // React to trick completion
   useEffect(() => {
-    if (playerOneTrickScore === 2) {
+    if (gameState.playerOne.trickScore === 2) {
       addToGameLog(`Player 1 wins the round!`)
-      setIsGameStarted(false)
-      setTrick(1)
-      setPlayerOneTrickScore(0)
-      setPlayerTwoTrickScore(0)
-      setPlayerOneRoundScore(prevRoundScore => prevRoundScore + bet.value)
-    } else if (playerTwoTrickScore === 2) {
+      updateGameState({
+        isStarted: false,
+        trick: 1
+      })
+      updatePlayer(1, { 
+        roundScore: gameState.playerOne.roundScore + gameState.bet.value,
+        trickScore: 0
+      })
+      updatePlayer(2, { trickScore: 0 })
+    } else if (gameState.playerTwo.trickScore === 2) {
       addToGameLog(`Player 2 wins the round!`)
-      setIsGameStarted(false)
-      setTrick(1)
-      setPlayerOneTrickScore(0)
-      setPlayerTwoTrickScore(0)
-      setPlayerTwoRoundScore(prevRoundScore => prevRoundScore + bet.value)
+      updateGameState({
+        isStarted: false,
+        trick: 1
+      })
+      updatePlayer(2, { 
+        roundScore: gameState.playerTwo.roundScore + gameState.bet.value,
+        trickScore: 0
+      })
+      updatePlayer(1, { trickScore: 0 })
     }
-  }, [playerOneTrickScore, playerTwoTrickScore, bet])
+  }, [gameState.playerOne.trickScore, gameState.playerTwo.trickScore, gameState.bet])
 
-  // Separate useEffect for logging round scores
+  // React to round completion
   useEffect(() => {
-    if (playerOneRoundScore > 0 || playerTwoRoundScore > 0) {
-      addToGameLog(`Player 1's score: ${playerOneRoundScore}`)
-      addToGameLog(`Player 2's score: ${playerTwoRoundScore}`)
+    if (gameState.playerOne.roundScore > 0 || gameState.playerTwo.roundScore > 0) {
+      addToGameLog(`Player 1's score: ${gameState.playerOne.roundScore}`)
+      addToGameLog(`Player 2's score: ${gameState.playerTwo.roundScore}`)
       addToGameLog(`--------------------------------`)
-      if (playerOneRoundScore >= 12) {
+      
+      if (gameState.playerOne.roundScore >= 12) {
         addToGameLog(`Player 1 wins the game!`)
-        setIsGameStarted(false)
-        setPlayerOneRoundScore(0)
-        setPlayerTwoRoundScore(0)
-      } else if (playerTwoRoundScore >= 12) {
+        updateGameState({ isStarted: false })
+        updatePlayer(1, { roundScore: 0 })
+        updatePlayer(2, { roundScore: 0 })
+      } else if (gameState.playerTwo.roundScore >= 12) {
         addToGameLog(`Player 2 wins the game!`)
-        setIsGameStarted(false)
-        setPlayerOneRoundScore(0)
-        setPlayerTwoRoundScore(0)
+        updateGameState({ isStarted: false })
+        updatePlayer(1, { roundScore: 0 })
+        updatePlayer(2, { roundScore: 0 })
       }
     }
-  }, [playerOneRoundScore, playerTwoRoundScore])
+  }, [gameState.playerOne.roundScore, gameState.playerTwo.roundScore])
 
   function handleResetGame() {
-    setPlayerOneHand([])
-    setPlayerTwoHand([])
-    setDivaCard(null)
-    setManilhas([])
-    setGameLog([])
-    setPlayerOnePlayStack([])
-    setPlayerTwoPlayStack([])
-    setPlayerOneTrickScore(0)
-    setPlayerTwoTrickScore(0)
-    setBet({ value: 1, player: null })
-    setBetStack({ value: 0, player: null })
-    setTrick(1)
-    setPlayerOneRoundScore(0)
-    setPlayerTwoRoundScore(0)
-    setDeck(JSON.parse(JSON.stringify(startingDeck)))
-    setIsGameStarted(false)
+    updateGameState({
+      divaCard: null,
+      manilhas: [],
+      gameLog: [],
+      betStack: { value: 0, player: null },
+      bet: { value: 1, player: null },
+      trick: 1,
+      deck: JSON.parse(JSON.stringify(startingDeck)),
+      isStarted: false
+    })
+    
+    updatePlayer(1, {
+      hand: [],
+      playStack: [],
+      trickScore: 0,
+      roundScore: 0
+    })
+    
+    updatePlayer(2, {
+      hand: [],
+      playStack: [],
+      trickScore: 0,
+      roundScore: 0
+    })
   }
 
-  const playerOneHandItems = isGameStarted ? playerOneHand.map((card) => (
+  const playerOneHandItems = gameState.isStarted ? gameState.playerOne.hand.map((card) => (
     <button onClick={() => handlePlayCard(card, 1)} key={card.id}>
       {card.name}
     </button>)
   ) : <button>N/A</button>
 
-  const playerTwoHandItems = isGameStarted ? playerTwoHand.map((card) => (
+  const playerTwoHandItems = gameState.isStarted ? gameState.playerTwo.hand.map((card) => (
     <button onClick={() => handlePlayCard(card, 2)} key={card.id}>
       {card.name}
     </button>
@@ -178,24 +234,23 @@ export default function App() {
   function handleFold(player) {
     addToGameLog(`Player ${player} folds`)
     addToGameLog(`--------------------------------`)
-    if (player === 1) {
-      setPlayerTwoTrickScore(2)
-      setBetStack({ value: 0, player: null })
-    } else if (player === 2) {
-      setPlayerOneTrickScore(2)
-      setBetStack({ value: 0, player: null })
-    } else {
-      addToGameLog(`Invalid player`)
-    }
-    setIsGameStarted(false)
+    
+    const winner = player === 1 ? 2 : 1
+    updatePlayer(winner, { trickScore: 2 })
+    updateGameState({
+      betStack: { value: 0, player: null },
+      isStarted: false
+    })
   }
 
   function handleAccept(player) {
-    if (betStack.value > 0) {
-      if (betStack.player !== player) {
+    if (gameState.betStack.value > 0) {
+      if (gameState.betStack.player !== player) {
         addToGameLog(`Player ${player} accepts`)
-        setBet({ value: betStack.value, player: player })
-        setBetStack({ value: 0, player: null })
+        updateGameState({
+          bet: { value: gameState.betStack.value, player: player },
+          betStack: { value: 0, player: null }
+        })
       } else {
         addToGameLog(`Player ${player} cannot accept (bet setter)`)
       }
@@ -206,30 +261,35 @@ export default function App() {
 
   function handleBet(betValue, player) {
     addToGameLog(`Player ${player} bets ${betValue}`)
-   if (betValue > 3) {
-      setBet({ value: betValue - 3, player: player })
+    
+    if (betValue > 3) {
+      updateGameState({
+        bet: { value: betValue - 3, player: player }
+      })
     }
-    setBetStack({ value: betValue, player: player })
+    
+    updateGameState({
+      betStack: { value: betValue, player: player }
+    })
   }
 
-  //TODO: add logic to include accepting
-  const playerOneActions = isGameStarted ? (
+  const playerOneActions = gameState.isStarted ? (
     <div>
-      {(betStack.value === 0 && bet.value === 1) && <button onClick={() => handleBet(3, 1)}>Truco</button>}
-      {((betStack.value === 3 || (bet.value === 3 && betStack.value === 0)) && betStack.player !== 1) && <button onClick={() => handleBet(6, 1)}>Seis</button>}
-      {((betStack.value === 6 || (bet.value === 6 && betStack.value === 0)) && betStack.player !== 1) && <button onClick={() => handleBet(9, 1)}>Nove</button>}
-      {((betStack.value === 9 || (bet.value === 9 && betStack.value === 0)) && betStack.player !== 1) && <button onClick={() => handleBet(12, 1)}>Doze</button>} 
+      {(gameState.betStack.value === 0 && gameState.bet.value === 1) && <button onClick={() => handleBet(3, 1)}>Truco</button>}
+      {((gameState.betStack.value === 3 || (gameState.bet.value === 3 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => handleBet(6, 1)}>Seis</button>}
+      {((gameState.betStack.value === 6 || (gameState.bet.value === 6 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => handleBet(9, 1)}>Nove</button>}
+      {((gameState.betStack.value === 9 || (gameState.bet.value === 9 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => handleBet(12, 1)}>Doze</button>} 
       <button onClick={() => handleFold(1)}>Corro</button>
       <button onClick={() => handleAccept(1)}>Aceito</button>
     </div>
   ) : <button>N/A</button>
 
-  const playerTwoActions = isGameStarted ? (
+  const playerTwoActions = gameState.isStarted ? (
     <div>
-      {(betStack.value === 0 && bet.value === 1) && <button onClick={() => handleBet(3, 2)}>Truco</button>}
-      {((betStack.value === 3 || (bet.value === 3 && betStack.value === 0)) && betStack.player !== 2) && <button onClick={() => handleBet(6, 2)}>Seis</button>}
-      {((betStack.value === 6 || (bet.value === 6 && betStack.value === 0)) && betStack.player !== 2) && <button onClick={() => handleBet(9, 2)}>Nove</button>}
-      {((betStack.value === 9 || (bet.value === 9 && betStack.value === 0)) && betStack.player !== 2) && <button onClick={() => handleBet(12, 2)}>Doze</button>}
+      {(gameState.betStack.value === 0 && gameState.bet.value === 1) && <button onClick={() => handleBet(3, 2)}>Truco</button>}
+      {((gameState.betStack.value === 3 || (gameState.bet.value === 3 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => handleBet(6, 2)}>Seis</button>}
+      {((gameState.betStack.value === 6 || (gameState.bet.value === 6 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => handleBet(9, 2)}>Nove</button>}
+      {((gameState.betStack.value === 9 || (gameState.bet.value === 9 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => handleBet(12, 2)}>Doze</button>}
       <button onClick={() => handleFold(2)}>Corro</button>
       <button onClick={() => handleAccept(2)}>Aceito</button>
     </div>
@@ -242,13 +302,17 @@ export default function App() {
       <ResetGameButton onResetGame={handleResetGame} />
       <h4>--------------------------------</h4>
       <div>
-        Diva: {divaCard?.name || 'Not set'}
+        Diva: {gameState.divaCard?.name || 'Not set'}
         <br />
-        Manilhas: {manilhas.map(card => card.name).join(', ') || 'Not set'}
+        Manilhas: {gameState.manilhas.map(card => card.name).join(', ') || 'Not set'}
         <br />
-        Bet Stack: {betStack.value}
+        Bet Stack: {gameState.betStack.value}
         <br />
-        Bet: {bet.value}
+        Bet: {gameState.bet.value}
+        <br />
+        Player 1's Score: {gameState.playerOne.roundScore}
+        <br />
+        Player 2's Score: {gameState.playerTwo.roundScore}
       </div>
       <h4>--------------------------------</h4>
 
@@ -262,7 +326,7 @@ export default function App() {
       {playerTwoActions}
       <h4>--------------------------------</h4>
       <h3>Game Log</h3>
-      {gameLog.map((message, index) => (
+      {gameState.gameLog.map((message, index) => (
         <div key={index}>{message}</div>
       ))}
     </div>
