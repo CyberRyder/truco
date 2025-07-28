@@ -1,7 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+import { socket } from './socket';
 
 export default function App() {
+
+  const [isConnected, setIsConnected] = useState(socket.connected);
+
   const [gameState, setGameState] = useState({
     // Game status
     isStarted: false,
@@ -57,6 +61,93 @@ export default function App() {
     }))
   }
 
+
+  function handlePlayCard(card, player) {
+    const currentPlayer = player === 1 ? gameState.playerOne : gameState.playerTwo
+    
+    //only play if the player has not played a card yet and the bet stack is empty
+    if (currentPlayer.playStack.length === 0 && gameState.betStack.value === 0) {
+      updatePlayer(player, {
+        playStack: [card],
+        hand: currentPlayer.hand.filter(c => c.id !== card.id)
+      })
+      addToGameLog(`${card.name} played by Player ${player}`)
+    } else if (gameState.betStack.value > 0) {
+      addToGameLog(`${card.name} cannot be played (Player ${player} has not bet/accepted)`)
+    } else {
+      addToGameLog(`${card.name} cannot be played (Player ${player} already played this trick)`)
+    }
+  }
+  
+  function handleFold(player) {
+    addToGameLog(`Player ${player} folds`)
+    addToGameLog(`--------------------------------`)
+    
+    const winner = player === 1 ? 2 : 1
+    updatePlayer(winner, { trickScore: 2 })
+    updateGameState({
+      betStack: { value: 0, player: null },
+      isStarted: false
+    })
+  }
+
+  function handleAccept(player) {
+    if (gameState.betStack.value > 0) {
+      if (gameState.betStack.player !== player) {
+        addToGameLog(`Player ${player} accepts`)
+        updateGameState({
+          bet: { value: gameState.betStack.value, player: player },
+          betStack: { value: 0, player: null }
+        })
+      } else {
+        addToGameLog(`Player ${player} cannot accept (bet setter)`)
+      }
+    } else {
+      addToGameLog(`Player ${player} cannot accept (no bet has been made)`)
+    }
+  }
+
+  function handleBet(betValue, player) {
+    addToGameLog(`Player ${player} bets ${betValue}`)
+    
+    if (betValue > 3) {
+      updateGameState({
+        bet: { value: betValue - 3, player: player }
+      })
+    }
+    
+    updateGameState({
+      betStack: { value: betValue, player: player }
+    })
+  }
+
+  function handleResetGame() {
+    updateGameState({
+      divaCard: null,
+      manilhas: [],
+      gameLog: [],
+      betStack: { value: 0, player: null },
+      bet: { value: 1, player: null },
+      trick: 1,
+      deck: JSON.parse(JSON.stringify(startingDeck)),
+      isStarted: false
+    })
+    
+    updatePlayer(1, {
+      hand: [],
+      playStack: [],
+      trickScore: 0,
+      roundScore: 0
+    })
+    
+    updatePlayer(2, {
+      hand: [],
+      playStack: [],
+      trickScore: 0,
+      roundScore: 0
+    })
+  }
+
   function handleNewRound() {
     // Reset deck
     const newDeck = JSON.parse(JSON.stringify(startingDeck))
@@ -102,23 +193,84 @@ export default function App() {
     addToGameLog(`--------------------------------`)
   }
 
-  function handlePlayCard(card, player) {
-    const currentPlayer = player === 1 ? gameState.playerOne : gameState.playerTwo
-    
-    //only play if the player has not played a card yet and the bet stack is empty
-    if (currentPlayer.playStack.length === 0 && gameState.betStack.value === 0) {
-      updatePlayer(player, {
-        playStack: [card],
-        hand: currentPlayer.hand.filter(c => c.id !== card.id)
-      })
-      addToGameLog(`${card.name} played by Player ${player}`)
-    } else if (gameState.betStack.value > 0) {
-      addToGameLog(`${card.name} cannot be played (Player ${player} has not bet/accepted)`)
-    } else {
-      addToGameLog(`${card.name} cannot be played (Player ${player} already played this trick)`)
+  //socket listeners
+  useEffect(() => {
+    function onConnect() {
+      setIsConnected(true)
+    }
+    function onDisconnect() {
+      setIsConnected(false)
+    }
+    function onError(error) {
+      console.error("Socket error:", error)
+    }
+    function onPlayCard(card, player) {
+      handlePlayCard(card, player)
+    }
+    function onFold(player) {
+      handleFold(player)
+    }
+    function onAccept(player) {
+      handleAccept(player)
+    }
+    function onBet(betValue, player) {
+      handleBet(betValue, player)
+    }
+    function onNewRound() {
+      handleNewRound()
+    }
+    function onResetGame() {
+      handleResetGame()
+    }
+
+    socket.on("connect", onConnect)
+    socket.on("disconnect", onDisconnect)
+    socket.on("error", onError)
+    socket.on("play card", onPlayCard)
+    socket.on("fold", onFold)
+    socket.on("accept", onAccept)
+    socket.on("bet", onBet)
+    socket.on("new round", onNewRound)
+    socket.on("reset game", onResetGame)
+
+    return () => {
+      socket.off("connect", onConnect)
+      socket.off("disconnect", onDisconnect)
+      socket.off("error", onError)
+      socket.off("play card", onPlayCard)
+      socket.off("fold", onFold)
+      socket.off("accept", onAccept)
+      socket.off("bet", onBet)
+      socket.off("new round", onNewRound)
+      socket.off("reset game", onResetGame)
+    }
+  }, [])
+
+  const emitSocketEvent = (event, data) => {
+    switch (event) {
+      case "play card":
+        socket.emit("play card", data.card, data.player)
+        break;
+      case "fold":
+        socket.emit("fold", data.player)
+        break;
+      case "accept":
+        socket.emit("accept", data.player)
+        break;
+      case "bet":
+        socket.emit("bet", data.betValue, data.player)
+        break;
+      case "new round":
+        socket.emit("new round")
+        break;
+      case "reset game":  
+        socket.emit("reset game")
+        break;
+      default:
+        console.log(`Unknown event: ${event}`)
     }
   }
-
+  
   // Check for trick completion
   useEffect(() => {
     if (gameState.playerOne.playStack.length > 0 && gameState.playerTwo.playStack.length > 0) {
@@ -142,7 +294,6 @@ export default function App() {
       updatePlayer(2, { playStack: [] })
     }
   }, [gameState.playerOne.playStack.length, gameState.playerTwo.playStack.length])
-
 
   // React to trick completion
   useEffect(() => {
@@ -192,114 +343,47 @@ export default function App() {
     }
   }, [gameState.playerOne.roundScore, gameState.playerTwo.roundScore])
 
-  function handleResetGame() {
-    updateGameState({
-      divaCard: null,
-      manilhas: [],
-      gameLog: [],
-      betStack: { value: 0, player: null },
-      bet: { value: 1, player: null },
-      trick: 1,
-      deck: JSON.parse(JSON.stringify(startingDeck)),
-      isStarted: false
-    })
-    
-    updatePlayer(1, {
-      hand: [],
-      playStack: [],
-      trickScore: 0,
-      roundScore: 0
-    })
-    
-    updatePlayer(2, {
-      hand: [],
-      playStack: [],
-      trickScore: 0,
-      roundScore: 0
-    })
-  }
-
+  // Render the game UI
   const playerOneHandItems = gameState.isStarted ? gameState.playerOne.hand.map((card) => (
-    <button onClick={() => handlePlayCard(card, 1)} key={card.id}>
+    <button onClick={() => emitSocketEvent("play card", { card, player: 1 })} key={card.id}>
       {card.name}
     </button>)
   ) : <button>N/A</button>
 
   const playerTwoHandItems = gameState.isStarted ? gameState.playerTwo.hand.map((card) => (
-    <button onClick={() => handlePlayCard(card, 2)} key={card.id}>
+    <button onClick={() => emitSocketEvent("play card", { card, player: 2 })} key={card.id}>
       {card.name}
     </button>
   )) : <button>N/A</button>
-  
-  function handleFold(player) {
-    addToGameLog(`Player ${player} folds`)
-    addToGameLog(`--------------------------------`)
-    
-    const winner = player === 1 ? 2 : 1
-    updatePlayer(winner, { trickScore: 2 })
-    updateGameState({
-      betStack: { value: 0, player: null },
-      isStarted: false
-    })
-  }
-
-  function handleAccept(player) {
-    if (gameState.betStack.value > 0) {
-      if (gameState.betStack.player !== player) {
-        addToGameLog(`Player ${player} accepts`)
-        updateGameState({
-          bet: { value: gameState.betStack.value, player: player },
-          betStack: { value: 0, player: null }
-        })
-      } else {
-        addToGameLog(`Player ${player} cannot accept (bet setter)`)
-      }
-    } else {
-      addToGameLog(`Player ${player} cannot accept (no bet has been made)`)
-    }
-  }
-
-  function handleBet(betValue, player) {
-    addToGameLog(`Player ${player} bets ${betValue}`)
-    
-    if (betValue > 3) {
-      updateGameState({
-        bet: { value: betValue - 3, player: player }
-      })
-    }
-    
-    updateGameState({
-      betStack: { value: betValue, player: player }
-    })
-  }
 
   const playerOneActions = gameState.isStarted ? (
     <div>
-      {(gameState.betStack.value === 0 && gameState.bet.value === 1) && <button onClick={() => handleBet(3, 1)}>Truco</button>}
-      {((gameState.betStack.value === 3 || (gameState.bet.value === 3 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => handleBet(6, 1)}>Seis</button>}
-      {((gameState.betStack.value === 6 || (gameState.bet.value === 6 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => handleBet(9, 1)}>Nove</button>}
-      {((gameState.betStack.value === 9 || (gameState.bet.value === 9 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => handleBet(12, 1)}>Doze</button>} 
-      <button onClick={() => handleFold(1)}>Corro</button>
-      <button onClick={() => handleAccept(1)}>Aceito</button>
+      {(gameState.betStack.value === 0 && gameState.bet.value === 1) && <button onClick={() => emitSocketEvent("bet", { betValue: 3, player: 1 })}>Truco</button>}
+      {((gameState.betStack.value === 3 || (gameState.bet.value === 3 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => emitSocketEvent("bet", { betValue: 6, player: 1 })}>Seis</button>}
+      {((gameState.betStack.value === 6 || (gameState.bet.value === 6 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => emitSocketEvent("bet", { betValue: 9, player: 1 })}>Nove</button>}
+      {((gameState.betStack.value === 9 || (gameState.bet.value === 9 && gameState.betStack.value === 0)) && gameState.betStack.player !== 1) && <button onClick={() => emitSocketEvent("bet", { betValue: 12, player: 1 })}>Doze</button>} 
+      <button onClick={() => emitSocketEvent("fold", { player: 1 })}>Corro</button>
+      <button onClick={() => emitSocketEvent("accept", { player: 1 })}>Aceito</button>
     </div>
   ) : <button>N/A</button>
 
   const playerTwoActions = gameState.isStarted ? (
     <div>
-      {(gameState.betStack.value === 0 && gameState.bet.value === 1) && <button onClick={() => handleBet(3, 2)}>Truco</button>}
-      {((gameState.betStack.value === 3 || (gameState.bet.value === 3 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => handleBet(6, 2)}>Seis</button>}
-      {((gameState.betStack.value === 6 || (gameState.bet.value === 6 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => handleBet(9, 2)}>Nove</button>}
-      {((gameState.betStack.value === 9 || (gameState.bet.value === 9 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => handleBet(12, 2)}>Doze</button>}
-      <button onClick={() => handleFold(2)}>Corro</button>
-      <button onClick={() => handleAccept(2)}>Aceito</button>
+      {(gameState.betStack.value === 0 && gameState.bet.value === 1) && <button onClick={() => emitSocketEvent("bet", { betValue: 3, player: 2 })}>Truco</button>}
+      {((gameState.betStack.value === 3 || (gameState.bet.value === 3 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => emitSocketEvent("bet", { betValue: 6, player: 2 })}>Seis</button>}
+      {((gameState.betStack.value === 6 || (gameState.bet.value === 6 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => emitSocketEvent("bet", { betValue: 9, player: 2 })}>Nove</button>}
+      {((gameState.betStack.value === 9 || (gameState.bet.value === 9 && gameState.betStack.value === 0)) && gameState.betStack.player !== 2) && <button onClick={() => emitSocketEvent("bet", { betValue: 12, player: 2 })}>Doze</button>}
+      <button onClick={() => emitSocketEvent("fold", { player: 2 })}>Corro</button>
+      <button onClick={() => emitSocketEvent("accept", { player: 2 })}>Aceito</button>
     </div>
   ) : <button>N/A</button>
 
   return (
     <div>
+      <h4>--------------------------------</h4>
       <h1>Truco Paulista</h1>
-      <NewRoundButton onNewRound={handleNewRound} />
-      <ResetGameButton onResetGame={handleResetGame} />
+      <NewRoundButton onNewRound={() => emitSocketEvent("new round")} />
+      <ResetGameButton onResetGame={() => emitSocketEvent("reset game")} />
       <h4>--------------------------------</h4>
       <div>
         Diva: {gameState.divaCard?.name || 'Not set'}
